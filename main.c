@@ -283,12 +283,18 @@ static void add_screen(xcb_randr_get_screen_info_reply_t *reply)
                     resources_reply->config_timestamp);
         output_info_reply =
             xcb_randr_get_output_info_reply(conn, output_info_cookie, NULL);
+        /* Show only if connected */
+        switch (output_info_reply->connection) {
+            case XCB_RANDR_CONNECTION_DISCONNECTED:
+            case XCB_RANDR_CONNECTION_UNKNOWN:
+                continue;
+            case XCB_RANDR_CONNECTION_CONNECTED:
+                break;
+        }
         output_name = get_output_name(output_info_reply);
         /* Put output names on the menu */
         gtk_menu_item_set_label(GTK_MENU_ITEM(item), output_name);
         g_free(output_name);
-        /* Use only first output name. */
-        break;
         /* TODO: concatenate multiple names or pick them intelligently */
     }
 }
