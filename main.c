@@ -34,7 +34,7 @@ struct screen_info {
     xcb_window_t root;
     uint16_t sizeID;
     GtkWidget *label_menu_item;
-    GtkWidget *rotation_menu_items[32];
+    GtkWidget *rotation_menu_items[33];
     GSList *rotation_menu_group;
 };
 
@@ -228,6 +228,7 @@ static void add_screen(xcb_randr_get_screen_info_reply_t *reply)
     xcb_randr_rotation_t rotation = reply->rotation;
     xcb_randr_rotation_t rotations = reply->rotations;
 
+    info->label_menu_item = item;
     info->rotation_menu_group = NULL;
     info->rotation = rotation;
     info->config_timestamp = reply->config_timestamp;
@@ -307,9 +308,9 @@ static void menu_on_item(GtkMenuItem *item, struct screen_info *screen_info)
             screen_info->config_timestamp, screen_info->sizeID);
 
     xcb_randr_set_screen_config_unchecked(conn, screen_info->root,
-            XCB_CURRENT_TIME,
-            screen_info->config_timestamp,
+            XCB_CURRENT_TIME, screen_info->config_timestamp,
             screen_info->sizeID, rotation, 0);
+
     xcb_flush(conn);
 }
 
