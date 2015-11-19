@@ -38,11 +38,6 @@ struct screen_info {
     GSList *rotation_menu_group;
 };
 
-struct screen_change_event {
-    struct screen_info *screen;
-    xcb_randr_rotation_t rotation;
-};
-
 uint8_t randr_base;
 
 GtkStatusIcon *status_icon;
@@ -57,16 +52,26 @@ static GSList *screens_info = NULL;
 /* static void menu_init_item(struct story *); */
 static void init_xcb();
 static gboolean on_xcb_event(GXCBSource *, xcb_generic_event_t *, gpointer);
-static void handle_screen_change(xcb_randr_screen_change_notify_event_t *);
-/*
-static void handle_set_screen_config_reply(
-        xcb_randr_get_screen_info_reply_t *);
-        */
+static void on_screen_change(xcb_randr_screen_change_notify_event_t *);
+static void on_set_screen(xcb_randr_set_screen_config_reply_t *);
 static void add_screen(xcb_randr_get_screen_info_reply_t *reply);
 static void add_screen_rotation(struct screen_info *screen_info,
         xcb_randr_rotation_t rotation, const gchar *label,
         gboolean is_active);
 static void menu_on_item(GtkMenuItem *, struct screen_info *);
+
+static struct screen_info *get_screen_info(xcb_window_t window)
+{
+    struct screen_info *screen_info;
+    GSList *screens;
+
+    for (screens = screens_info; screens; screens = g_slist_next(screens)) {
+        screen_info = screens->data;
+        if (screen_info->root == window)
+            return screen_info;
+    }
+    return NULL;
+}
 
 static void menu_on_about(GtkMenuItem *menuItem, gpointer userData)
 {
@@ -80,6 +85,12 @@ static void menu_on_about(GtkMenuItem *menuItem, gpointer userData)
             "license", LICENSE,
             "wrap-license", TRUE,
             NULL);
+}
+
+static void menu_on_quit(GtkMenuItem *item, gpointer userData)
+{
+    xcb_disconnect(conn);
+    gtk_main_quit();
 }
 
 static gboolean status_icon_on_button_press(GtkStatusIcon *status_icon,
@@ -123,7 +134,8 @@ int main(int argc, char *argv[])
 
     /* Quit */
     item = gtk_menu_item_new_with_mnemonic(_("_Quit"));
-    g_signal_connect(item, "activate", G_CALLBACK(gtk_main_quit), NULL);
+    g_signal_connect(item, "activate", G_CALLBACK(menu_on_quit), NULL);
+
     gtk_menu_shell_append(menu, item);
 
     init_xcb();
@@ -144,10 +156,8 @@ static void init_xcb()
     xcb_screen_iterator_t screen_iter;
     xcb_drawable_t win;
     guint num_screens;
-    // struct screen *screens;
     guint i;
     xcb_generic_error_t *err = NULL;
-    // xcb_randr_get_screen_info_cookie_t get_info_cookie;
 
     /* Open xcb connection */
     conn = xcb_connect(NULL, NULL);
@@ -255,56 +265,52 @@ static void add_screen_rotation(struct screen_info *screen_info,
         gtk_radio_menu_item_get_group(GTK_RADIO_MENU_ITEM(item));
     screen_info->rotation_menu_items[rotation] = item;
 
-    g_object_set_data(G_OBJECT(item), "rotation", GUINT_TO_POINTER(rotation));
-    g_signal_connect(item, "activate", G_CALLBACK(menu_on_item), screen_info);
-
     if (is_active)
         gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(item), TRUE);
+
+    g_object_set_data(G_OBJECT(item), "rotation", GUINT_TO_POINTER(rotation));
+    g_signal_connect(item, "activate", G_CALLBACK(menu_on_item), screen_info);
 
     gtk_menu_shell_append(menu, item);
 }
 
-static void handle_screen_change(xcb_randr_screen_change_notify_event_t *ev)
+static void on_screen_change(xcb_randr_screen_change_notify_event_t *ev)
 {
     GtkWidget *item;
-    GSList *screens;
-    struct screen_info *screen_info;
+    struct screen_info *screen_info = get_screen_info(ev->root);
 
-
-    for (screens = screens_info; screens; screens = g_slist_next(screens)) {
-        screen_info = screens->data;
-        if (screen_info->root == ev->root)
-            break;
-    }
-    if (!screens) {
+    if (!screen_info) {
         g_warning("Unable to find screen\n");
         return;
     }
 
     /* Update menu item with new rotation setting */
-    printf("got rotation: %u\n", ev->rotation);
     item = screen_info->rotation_menu_items[ev->rotation];
+    printf("got rotation: %u. item: %p\n", ev->rotation, item);
+
+	g_signal_handlers_block_by_func(G_OBJECT(item),
+            G_CALLBACK(menu_on_item), (gpointer)screen_info);
     gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(item), TRUE);
+	g_signal_handlers_unblock_by_func(G_OBJECT(item),
+            G_CALLBACK(menu_on_item), (gpointer)screen_info);
 }
 
 static void menu_on_item(GtkMenuItem *item, struct screen_info *screen_info)
 {
-    xcb_randr_set_screen_config_cookie_t cookie;
     xcb_randr_rotation_t rotation;
 
     if (!gtk_check_menu_item_get_active(GTK_CHECK_MENU_ITEM(item)))
         return;
 
     rotation = GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(item), "rotation"));
-    printf("set rotation %u\n", rotation);
+    printf("set rotation %u. timestamp: %u. size: %u\n", rotation,
+            screen_info->config_timestamp, screen_info->sizeID);
 
-    cookie = xcb_randr_set_screen_config_unchecked(conn, screen_info->root,
+    xcb_randr_set_screen_config_unchecked(conn, screen_info->root,
             XCB_CURRENT_TIME,
             screen_info->config_timestamp,
             screen_info->sizeID, rotation, 0);
     xcb_flush(conn);
-
-    (void)cookie;
 }
 
 static gboolean on_xcb_event(GXCBSource *source, xcb_generic_event_t *ev,
@@ -324,40 +330,11 @@ static gboolean on_xcb_event(GXCBSource *source, xcb_generic_event_t *ev,
         case XCB_RANDR_SELECT_INPUT:
             break;
         case XCB_RANDR_SCREEN_CHANGE_NOTIFY:
-            handle_screen_change(
-                    (xcb_randr_screen_change_notify_event_t *)ev);
+            on_screen_change((xcb_randr_screen_change_notify_event_t *)ev);
             break;
-        case XCB_RANDR_SET_SCREEN_CONFIG: {
-            printf("set screen config");
-            xcb_randr_get_screen_info_reply_t *reply =
-                (xcb_randr_get_screen_info_reply_t *)ev;
-            struct screen_info *screen_info;
-            GSList *screens;
-
-            for (screens = screens_info; screens;
-                    screens = g_slist_next(screens)) {
-                screen_info = screens->data;
-                // screen_info->timestamp = reply->new_timestamp;
-                screen_info->config_timestamp = reply->config_timestamp;
-            }
-            /*
-            // handle_set_screen_config_reply(
-                    // (xcb_randr_get_screen_info_reply_t *)ev);
-            xcb_randr_set_screen_config_cookie_t cookie = {ev->sequence};
-
-            cur_info = xcb_randr_set_screen_config_reply(conn,
-                    cookie, &err);
-            if (err) {
-                g_warning("Error setting screen config\n");
-                err = NULL;
-                continue;
-            }
-                    */
-            reply = (xcb_randr_get_screen_info_reply_t *)ev;
-            printf("rotations: %u, rotation: %u\n", reply->rotations,
-                    reply->rotation);
+        case XCB_RANDR_SET_SCREEN_CONFIG:
+            on_set_screen((xcb_randr_set_screen_config_reply_t *)ev);
             break;
-        }
         default:
             printf("unknown event %u (%u)\n", ev->response_type, randr_base);
             break;
@@ -366,12 +343,18 @@ static gboolean on_xcb_event(GXCBSource *source, xcb_generic_event_t *ev,
     return G_SOURCE_CONTINUE;
 }
 
-/*
-    if (xcb_connection_has_error(conn)) {
-        g_error("Display connection closed by server\n");
+static void on_set_screen(xcb_randr_set_screen_config_reply_t *reply)
+{
+    struct screen_info *screen_info = get_screen_info(reply->root);
+    if (!screen_info) {
+        g_warning("Unknown screen\n");
+        return;
     }
-    */
 
-    // xcb_disconnect(conn);
+    // screen_info->timestamp = reply->new_timestamp;
+    screen_info->config_timestamp = reply->config_timestamp;
+
+    printf("set screen config. timestamp: %u\n", reply->config_timestamp);
+}
 
 /* vim: set expandtab ts=4 sw=4: */
