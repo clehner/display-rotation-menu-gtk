@@ -54,9 +54,7 @@ static void init_xcb();
 static gboolean on_xcb_event(GXCBSource *, xcb_generic_event_t *, gpointer);
 static void on_screen_change(xcb_randr_screen_change_notify_event_t *);
 static void on_set_screen(xcb_randr_set_screen_config_reply_t *);
-static void on_get_screen_resources(
-        xcb_randr_get_screen_resources_current_reply_t *);
-static void on_get_output_info(xcb_randr_get_output_info_reply_t *);
+static gchar *get_output_name(xcb_randr_get_output_info_reply_t *);
 static void add_screen(xcb_randr_get_screen_info_reply_t *reply);
 static void add_screen_rotation(struct screen_info *screen_info,
         xcb_randr_rotation_t rotation, const gchar *label,
@@ -193,13 +191,6 @@ static void init_xcb()
         screen = screen_iter.data;
         win = screen->root;
 
-        /*
-        uint16_t mask = (uint16_t) XCB_EVENT_MASK_STRUCTURE_NOTIFY;
-        uint32_t values[1];
-        values[0] = 1;
-        xcb_configure_window(conn, screen->root, mask, values);
-        */
-
         /* Register for screen change events */
         xcb_randr_select_input(conn, win, XCB_RANDR_NOTIFY_MASK_SCREEN_CHANGE);
 
@@ -265,8 +256,41 @@ static void add_screen(xcb_randr_get_screen_info_reply_t *reply)
     gtk_menu_shell_append(menu, gtk_separator_menu_item_new());
     gtk_widget_show_all(app_menu);
 
-    printf("get resources\n");
-    xcb_randr_get_screen_resources_current_unchecked(conn, info->root);
+    /* Get screen resources */
+    xcb_randr_get_screen_resources_current_cookie_t resources_cookie;
+    xcb_randr_get_screen_resources_current_reply_t *resources_reply;
+    xcb_generic_error_t *err = NULL;
+
+    resources_cookie = xcb_randr_get_screen_resources_current(conn,
+            info->root);
+    resources_reply = xcb_randr_get_screen_resources_current_reply(conn,
+            resources_cookie, &err);
+    if (err) {
+        g_warning("Get Screen Resources returned error %u\n", err->error_code);
+        return;
+    }
+
+    /* Get screen outputs */
+    xcb_randr_output_t *outputs;
+    guint i;
+    gchar *output_name;
+
+    outputs = xcb_randr_get_screen_resources_current_outputs(resources_reply);
+    for (i = 0; i < resources_reply->num_outputs; i++) {
+        xcb_randr_get_output_info_reply_t *output_info_reply;
+        xcb_randr_get_output_info_cookie_t output_info_cookie =
+            xcb_randr_get_output_info_unchecked(conn, outputs[i],
+                    resources_reply->config_timestamp);
+        output_info_reply =
+            xcb_randr_get_output_info_reply(conn, output_info_cookie, NULL);
+        output_name = get_output_name(output_info_reply);
+        /* Put output names on the menu */
+        gtk_menu_item_set_label(GTK_MENU_ITEM(item), output_name);
+        g_free(output_name);
+        /* Use only first output name. */
+        break;
+        /* TODO: concatenate multiple names or pick them intelligently */
+    }
 }
 
 static void add_screen_rotation(struct screen_info *screen_info,
@@ -301,7 +325,9 @@ static void on_screen_change(xcb_randr_screen_change_notify_event_t *ev)
 
     /* Update menu item with new rotation setting */
     item = screen_info->rotation_menu_items[ev->rotation];
-    printf("got rotation: %u. item: %p\n", ev->rotation, item);
+    screen_info->config_timestamp = ev->config_timestamp;
+    printf("got rotation: %u. timestamp: %u\n", ev->rotation,
+            screen_info->config_timestamp);
 
 	g_signal_handlers_block_by_func(G_OBJECT(item),
             G_CALLBACK(menu_on_item), (gpointer)screen_info);
@@ -350,14 +376,6 @@ static gboolean on_xcb_event(GXCBSource *source, xcb_generic_event_t *ev,
         case XCB_RANDR_SET_SCREEN_CONFIG:
             on_set_screen((xcb_randr_set_screen_config_reply_t *)ev);
             break;
-        case XCB_RANDR_GET_SCREEN_RESOURCES_CURRENT:
-            on_get_screen_resources(
-                    (xcb_randr_get_screen_resources_current_reply_t *)ev);
-            break;
-        case XCB_RANDR_GET_OUTPUT_INFO:
-            on_get_output_info(
-                    (xcb_randr_get_output_info_reply_t *)ev);
-            break;
         default:
             printf("unknown event %u (%u)\n", ev->response_type, randr_base);
             break;
@@ -380,21 +398,7 @@ static void on_set_screen(xcb_randr_set_screen_config_reply_t *reply)
     printf("set screen config. timestamp: %u\n", reply->config_timestamp);
 }
 
-static void on_get_screen_resources(
-        xcb_randr_get_screen_resources_current_reply_t *reply)
-{
-    xcb_randr_output_t *outputs;
-    guint i;
-    printf("got resources: %u outputs\n", reply->num_outputs);
-
-    outputs = xcb_randr_get_screen_resources_current_outputs(reply);
-    for (i = 0; i < reply->num_outputs; i++)
-        xcb_randr_get_output_info_unchecked(conn, outputs[i],
-                reply->config_timestamp);
-    xcb_flush(conn);
-}
-
-static void on_get_output_info(xcb_randr_get_output_info_reply_t *reply)
+static gchar *get_output_name(xcb_randr_get_output_info_reply_t *reply)
 {
     gchar *name;
     uint8_t *nbuf;
@@ -402,8 +406,7 @@ static void on_get_output_info(xcb_randr_get_output_info_reply_t *reply)
     nbuf = xcb_randr_get_output_info_name(reply);
     name = reply->name_len > 0 ?
         g_strndup((gchar *)nbuf, reply->name_len) : NULL;
-    printf("output name (%u): %s\n", reply->name_len, name);
-    g_free(name);
+    return name;
 }
 
 /* vim: set expandtab ts=4 sw=4: */
