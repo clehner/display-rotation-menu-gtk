@@ -385,7 +385,7 @@ static void on_get_screen_resources(
 {
     xcb_randr_output_t *outputs;
     guint i;
-    printf("got resources\n");
+    printf("got resources: %u outputs\n", reply->num_outputs);
 
     outputs = xcb_randr_get_screen_resources_current_outputs(reply);
     for (i = 0; i < reply->num_outputs; i++)
@@ -397,13 +397,12 @@ static void on_get_screen_resources(
 static void on_get_output_info(xcb_randr_get_output_info_reply_t *reply)
 {
     gchar *name;
-    printf("got output info\n");
     uint8_t *nbuf;
+
     nbuf = xcb_randr_get_output_info_name(reply);
-    nbuf += reply->name_len;
     name = reply->name_len > 0 ?
         g_strndup((gchar *)nbuf, reply->name_len) : NULL;
-    printf("output name: %s\n", name);
+    printf("output name (%u): %s\n", reply->name_len, name);
     g_free(name);
 }
 
