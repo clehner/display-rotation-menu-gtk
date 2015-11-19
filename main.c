@@ -298,7 +298,7 @@ static void menu_on_item(GtkMenuItem *item, struct screen_info *screen_info)
     rotation = GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(item), "rotation"));
     printf("set rotation %u\n", rotation);
 
-    cookie = xcb_randr_set_screen_config(conn, screen_info->root,
+    cookie = xcb_randr_set_screen_config_unchecked(conn, screen_info->root,
             XCB_CURRENT_TIME,
             screen_info->config_timestamp,
             screen_info->sizeID, rotation, 0);
@@ -309,6 +309,16 @@ static void menu_on_item(GtkMenuItem *item, struct screen_info *screen_info)
 
 static gboolean on_xcb_event(GXCBSource *source, xcb_generic_event_t *ev,
         gpointer user_data) {
+
+    switch (ev->response_type) {
+        case 0: {
+            xcb_generic_error_t *err = (xcb_generic_error_t *)ev;
+            printf("Received X11 error %d\n", err->error_code);
+            free(err);
+            return G_SOURCE_CONTINUE;
+        }
+    }
+
     printf("event\n");
     switch (ev->response_type - randr_base) {
         case XCB_RANDR_SELECT_INPUT:
@@ -349,7 +359,7 @@ static gboolean on_xcb_event(GXCBSource *source, xcb_generic_event_t *ev,
             break;
         }
         default:
-            printf("unknown event\n");
+            printf("unknown event %u (%u)\n", ev->response_type, randr_base);
             break;
     }
     free(ev);
