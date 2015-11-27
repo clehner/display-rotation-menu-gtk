@@ -1,6 +1,4 @@
 BIN = display-rotation-menu
-SRC = main.c xcbsource.c
-OBJ = $(SRC:.c=.o)
 LIBS = gtk+-2.0 xcb xcb-randr
 CFLAGS = -Wall -Werror -Wextra -Wno-unused-parameter -std=gnu99 -g \
 		 $(shell pkg-config --cflags $(LIBS))
@@ -14,7 +12,9 @@ debug:
 	@$(MAKE) --no-print-directory
 	gdb ./$(BIN)
 
-$(BIN):: $(OBJ)
+display-rotation-menu: main.o xcbsource.o
+
+$(BIN):
 	$(CC) -o $@ $^ $(LDFLAGS)
 
 install: all
@@ -24,6 +24,6 @@ uninstall:
 	rm -f $(DESTDIR)$(BINDIR)/$(BIN)
 
 clean:
-	rm -f $(BIN) $(OBJ)
+	rm -f $(BIN) $(wildcard *.o)
 
 .PHONY: all clean install uninstall
