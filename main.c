@@ -167,6 +167,9 @@ static void init_xcb()
         exit(EXIT_FAILURE);
     }
 
+    /* query the version to prevent error 16 when setting config */
+    xcb_randr_query_version_unchecked(conn, 1, 5);
+
     qer = xcb_get_extension_data(conn, &xcb_randr_id);
     if (!qer || !qer->present) {
         g_error("RandR extension missing\n");
