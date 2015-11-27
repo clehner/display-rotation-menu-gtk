@@ -1,4 +1,4 @@
-BIN = display-rotation-menu
+BIN = display-rotation-menu-gtk
 LIBS = gtk+-2.0 xcb xcb-randr
 CFLAGS = -Wall -Werror -Wextra -Wno-unused-parameter -std=gnu99 -g \
 		 $(shell pkg-config --cflags $(LIBS))
@@ -12,7 +12,7 @@ debug:
 	@$(MAKE) --no-print-directory
 	gdb ./$(BIN)
 
-display-rotation-menu: main.o xcbsource.o
+$(BIN): main.o xcbsource.o
 
 $(BIN):
 	$(CC) -o $@ $^ $(LDFLAGS)
