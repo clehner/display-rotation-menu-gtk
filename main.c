@@ -70,6 +70,24 @@ static void add_screen_rotation(struct screen_info *screen_info,
         gboolean is_active);
 static void menu_on_item(GtkMenuItem *, struct screen_info *);
 
+static inline xcb_randr_rotation_t normalize_rotation(uint16_t r)
+{
+    /* if both reflections are picked, turn it into a rotation */
+    if ((r & xcb_reflections_mask) == xcb_reflections_mask) {
+        switch (r ^ xcb_reflections_mask) {
+            case XCB_RANDR_ROTATION_ROTATE_0:
+                return XCB_RANDR_ROTATION_ROTATE_180;
+            case XCB_RANDR_ROTATION_ROTATE_90:
+                return XCB_RANDR_ROTATION_ROTATE_270;
+            case XCB_RANDR_ROTATION_ROTATE_180:
+                return XCB_RANDR_ROTATION_ROTATE_0;
+            case XCB_RANDR_ROTATION_ROTATE_270:
+                return XCB_RANDR_ROTATION_ROTATE_90;
+        }
+    }
+    return r;
+}
+
 static struct screen_info *get_screen_info(xcb_window_t window)
 {
     struct screen_info *screen_info;
@@ -239,7 +257,7 @@ static void add_screen(xcb_randr_get_screen_info_reply_t *reply)
     GtkWidget *item = gtk_menu_item_new_with_label(title);
     GtkMenuShell *menu = GTK_MENU_SHELL(app_menu);
     struct screen_info *info = g_malloc(sizeof *info);
-    xcb_randr_rotation_t rotation = reply->rotation;
+    xcb_randr_rotation_t rotation = normalize_rotation(reply->rotation);
     xcb_randr_rotation_t rotations = reply->rotations;
 
     info->label_menu_item = item;
@@ -361,7 +379,7 @@ static void check_rotation_menu_item(struct screen_info *info,
 static void on_screen_change(xcb_randr_screen_change_notify_event_t *ev)
 {
     struct screen_info *screen_info = get_screen_info(ev->root);
-    xcb_randr_rotation_t rotation = ev->rotation;
+    xcb_randr_rotation_t rotation = normalize_rotation(ev->rotation);
 
     if (!screen_info) {
         g_warning("Unable to find screen\n");
@@ -394,7 +412,7 @@ static void menu_on_item(GtkMenuItem *item, struct screen_info *screen_info)
         return;
     }
 
-    old_config = screen_info->rotation;
+    old_config = normalize_rotation(screen_info->rotation);
     rotation = old_config & xcb_rotations_mask;
     reflection = old_config & xcb_reflections_mask;
 
@@ -410,7 +428,7 @@ static void menu_on_item(GtkMenuItem *item, struct screen_info *screen_info)
     xcb_randr_set_screen_config_unchecked(conn, screen_info->root,
             XCB_CURRENT_TIME, screen_info->config_timestamp,
             screen_info->sizeID,
-            rotation | reflection,
+            normalize_rotation(rotation | reflection),
             screen_info->rate);
 
     xcb_flush(conn);
