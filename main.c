@@ -1,5 +1,5 @@
 /*
- * display-rotation-icon
+ * display-rotation-menu
  * Copyright (c) 2015 Charles Lehner
  * Fair License (Fair)
  */
@@ -21,10 +21,10 @@ DISCLAIMER: THE WORKS ARE WITHOUT WARRANTY."
 #include "xcbsource.h"
 
 #define VERSION "0.0.0"
-#define APPNAME "display-rotation-icon"
+#define APPNAME "display-rotation-menu"
 #define COPYRIGHT "Copyright (c) 2015 Charles Lehner"
 #define COMMENTS "Display Rotation Icon"
-#define WEBSITE "https://github.com/clehner/display-rotation-icon"
+#define WEBSITE "https://github.com/clehner/display-rotation-menu"
 
 #define LOGO_ICON "display"
 

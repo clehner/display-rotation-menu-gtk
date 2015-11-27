@@ -1,4 +1,4 @@
-# gtk-display-rotation-menu
+# display-rotation-menu
 
 A tray icon menu thing for setting the rotation settings of computer displays.
 
