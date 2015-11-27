@@ -389,8 +389,6 @@ static void on_screen_change(xcb_randr_screen_change_notify_event_t *ev)
     /* Update menu items with new rotation setting */
     screen_info->config_timestamp = ev->config_timestamp;
     screen_info->rotation = rotation;
-    printf("got rotation: %u. timestamp: %u\n", rotation,
-            screen_info->config_timestamp);
 
     check_rotation_menu_item(screen_info,
             rotation & xcb_rotations_mask, TRUE);
@@ -421,9 +419,6 @@ static void menu_on_item(GtkMenuItem *item, struct screen_info *screen_info)
     } else if (option & xcb_reflections_mask) {
             reflection ^= option;
     }
-
-    printf("set rotation %u. old rotation %u\n",
-            rotation | reflection, old_config);
 
     xcb_randr_set_screen_config_unchecked(conn, screen_info->root,
             XCB_CURRENT_TIME, screen_info->config_timestamp,
@@ -473,8 +468,6 @@ static void on_set_screen(xcb_randr_set_screen_config_reply_t *reply)
     }
 
     screen_info->config_timestamp = reply->config_timestamp;
-
-    printf("set screen config. status: %u\n", reply->status);
 }
 
 static gchar *get_output_name(xcb_randr_get_output_info_reply_t *reply)
