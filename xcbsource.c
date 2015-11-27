@@ -1,3 +1,12 @@
+/* xcbsource
+ * Copyright (c) 2015 Charles Lehner
+ *
+ * Fair License (Fair)
+ * Usage of the works is permitted provided that this instrument
+ * is retained with the works, so that any entity that uses the
+ * works is notified of this instrument.
+*/
+
 #include <glib.h>
 
 #include "xcbsource.h"
