@@ -137,8 +137,13 @@ int main(int argc, char *argv[])
 {
     GtkWidget *item;
     GtkMenuShell *menu;
+    GError *error = NULL;
 
-    gtk_init(&argc, &argv);
+    if (!gtk_init_with_args(&argc, &argv, NULL, NULL, NULL, &error)) {
+        fprintf(stderr, "gtk init: %s\n", error->message);
+        g_error_free(error);
+        return 1;
+    }
 
     /* Status icon */
     status_icon = gtk_status_icon_new_from_icon_name(LOGO_ICON);
@@ -188,7 +193,7 @@ static void init_xcb()
     xcb_generic_error_t *err = NULL;
 
     /* Open xcb connection */
-    conn = xcb_connect(NULL, NULL);
+    conn = xcb_connect(gdk_get_display_arg_name(), NULL);
     if (xcb_connection_has_error(conn)) {
         g_error("Failed to connect to display\n");
         exit(EXIT_FAILURE);
